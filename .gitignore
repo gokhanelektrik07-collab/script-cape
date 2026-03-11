@@ -1,18 +1,137 @@
-# Build and Release Folders
-bin-debug/
-bin-release/
-[Oo]bj/
-[Bb]in/
+// ==UserScript==
+// @name         ELT Hybrid Client v11.0
+// @match        https://bloxd.io/*
+// @grant        none
+// ==/UserScript==
 
-# Other files and folders
-.settings/
+(function() {
+    'use strict';
 
-# Executables
-*.swf
-*.air
-*.ipa
-*.apk
+    // --- AYARLAR ---
+    let state = {
+        pelerinAcik: true,
+        menuAcik: false,
+        genislik: 45,
+        yukseklik: 95,
+        incelik: 600,
+        hiz: 0,
+        currentRotation: 10
+    };
 
-# Project files, i.e. `.project`, `.actionScriptProperties` and `.flexProperties`
-# should NOT be excluded as they contain compiler settings and other important
-# information for Eclipse / Flash Builder.
+    // --- 1. PELERİN GÖRSELİ ÇİZİCİ ---
+    function getCapeData() {
+        const cvs = document.createElement("canvas");
+        const cx = cvs.getContext("2d");
+        cvs.width = 40; cvs.height = 100;
+        // Zemin
+        cx.fillStyle = "blue";  cx.fillRect(0, 0, 20, 50);
+        cx.fillStyle = "white"; cx.fillRect(20, 0, 20, 50);
+        cx.fillStyle = "cyan";  cx.fillRect(0, 50, 20, 50);
+        cx.fillStyle = "red";   cx.fillRect(20, 50, 20, 50);
+        // Yazı
+        cx.fillStyle = "red"; cx.font = "bold 10px Arial"; cx.textAlign = "center"; cx.fillText("ELT", 20, 15);
+        // Şimşek
+        cx.fillStyle = "#FFD700"; cx.fillRect(12, 35, 16, 16);
+        cx.fillStyle = "white"; cx.font = "14px Arial"; cx.fillText("⚡", 20, 48);
+        return cvs.toDataURL();
+    }
+    const capeImg = getCapeData();
+
+    // --- 2. ARAYÜZ (GUI) ---
+    const menuDiv = document.createElement("div");
+    menuDiv.style = `
+        position: fixed; top: 50%; left: 85%; transform: translate(-50%, -50%);
+        width: 220px; background: rgba(10, 10, 10, 0.95); border: 2px solid #FFD700;
+        border-radius: 12px; padding: 15px; z-index: 100000; display: none;
+        color: white; font-family: 'Segoe UI', sans-serif; box-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
+    `;
+    menuDiv.innerHTML = `
+        <div style="text-align:center; margin-bottom:10px;">
+            <img src="https://i.postimg.cc/fRpcmPqN/Vortex-Logo.png" style="width:40px; vertical-align:middle;">
+            <span style="color:#FFD700; font-weight:bold; margin-left:5px;">ELT SETTINGS</span>
+        </div>
+        <div style="font-size:11px; color:#aaa; margin-bottom:10px; text-align:center;">
+            Kapat: <span style="color:#fff">Sağ Shift</span> | Ayar: <span style="color:#fff">*</span>
+        </div>
+        <hr style="border:0; border-top:1px solid #333; margin:10px 0;">
+        <label style="font-size:12px;">Genişlik: <b id="wV">45</b></label>
+        <input type="range" id="wS" min="20" max="80" value="45" style="width:100%; accent-color:#FFD700;">
+        <br><br>
+        <label style="font-size:12px;">Yükseklik: <b id="hV">95</b></label>
+        <input type="range" id="hS" min="50" max="150" value="95" style="width:100%; accent-color:#FFD700;">
+        <br><br>
+        <label style="font-size:12px;">İncelik: <b id="dV">600</b></label>
+        <input type="range" id="dS" min="200" max="1200" value="600" style="width:100%; accent-color:#FFD700;">
+    `;
+    document.body.appendChild(menuDiv);
+
+    // --- 3. PELERİN ELEMENTLERİ ---
+    const capeContainer = document.createElement("div");
+    capeContainer.style = `position: fixed; left: 50%; top: 52.5%; pointer-events: none; z-index: 1; transform: translateX(-50%);`;
+    const capeBody = document.createElement("div");
+    capeBody.style = `width:100%; height:100%; background:url(${capeImg}); background-size:100% 100%; transform-origin:top; transition: transform 0.1s ease-out;`;
+    capeContainer.appendChild(capeBody);
+    document.body.appendChild(capeContainer);
+
+    // --- 4. KONTROLLER ---
+    window.addEventListener('keydown', (e) => {
+        if(e.key === '*' || e.code === 'NumpadMultiply') {
+            state.menuAcik = !state.menuAcik;
+            menuDiv.style.display = state.menuAcik ? "block" : "none";
+        }
+        if(e.code === 'ShiftRight') {
+            state.pelerinAcik = !state.pelerinAcik;
+        }
+        if(['KeyW','KeyS','KeyA','KeyD'].includes(e.code)) state.hiz = 15;
+        if(e.code === 'Space') state.hiz = 22;
+    });
+
+    window.addEventListener('keyup', (e) => {
+        if(['KeyW','KeyS','KeyA','KeyD', 'Space'].includes(e.code)) state.hiz = 0;
+    });
+
+    const updateGUI = () => {
+        state.genislik = document.getElementById("wS").value;
+        state.yukseklik = document.getElementById("hS").value;
+        state.incelik = document.getElementById("dS").value;
+        document.getElementById("wV").innerText = state.genislik;
+        document.getElementById("hV").innerText = state.yukseklik;
+        document.getElementById("dV").innerText = state.incelik;
+        capeContainer.style.width = state.genislik + "px";
+        capeContainer.style.height = state.yukseklik + "px";
+        capeContainer.style.perspective = state.incelik + "px";
+    };
+
+    document.getElementById("wS").oninput = updateGUI;
+    document.getElementById("hS").oninput = updateGUI;
+    document.getElementById("dS").oninput = updateGUI;
+
+    // --- 5. ANA DÖNGÜ VE SENKRONİZASYON ---
+    function loop(t) {
+        if(state.pelerinAcik) {
+            capeContainer.style.display = "block";
+            let wave = Math.sin(t / 200) * 5;
+            let target = 10 + state.hiz + wave;
+            state.currentRotation += (target - state.currentRotation) * 0.1;
+            capeBody.style.transform = `rotateX(${Math.min(state.currentRotation, 45)}deg)`;
+
+            // Senkronizasyon: Diğer ELT_ oyuncularını kontrol et
+            document.querySelectorAll(".player-nick").forEach(nick => {
+                if (nick.innerText.includes("ELT_") && !nick.querySelector(".elt-cape")) {
+                    let c = document.createElement("div");
+                    c.className = "elt-cape";
+                    c.style = `position:absolute; width:15px; height:30px; background:url(${capeImg}); background-size:100% 100%; top:25px; left:50%; transform:translateX(-50%) rotateX(15deg); z-index:-1;`;
+                    nick.appendChild(c);
+                }
+            });
+        } else {
+            capeContainer.style.display = "none";
+            document.querySelectorAll(".elt-cape").forEach(c => c.remove());
+        }
+        requestAnimationFrame(loop);
+    }
+
+    updateGUI();
+    requestAnimationFrame(loop);
+    console.log("Vortex-Style ELT Client loaded.");
+})();
